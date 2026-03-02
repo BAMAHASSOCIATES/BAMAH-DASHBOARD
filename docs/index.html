@@ -23,6 +23,54 @@
       font-size: 24px;
       font-weight: bold;
     }
+    .market-row{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:16px;
+}
+
+.status-wrap{
+  display:flex;
+  align-items:center;
+  gap:10px;
+}
+
+.status-text{
+  font-size:16px;
+  opacity:0.95;
+}
+
+.led{
+  width:12px;
+  height:12px;
+  border-radius:999px;
+  display:inline-block;
+  box-shadow: 0 0 10px rgba(255,255,255,0.15);
+  border:1px solid rgba(255,255,255,0.15);
+}
+
+/* Colores */
+.led-green{
+  background:#22c55e;
+  box-shadow: 0 0 12px rgba(34,197,94,0.8);
+}
+
+.led-yellow{
+  background:#eab308;
+  box-shadow: 0 0 12px rgba(234,179,8,0.8);
+}
+
+.led-red{
+  background:#ef4444;
+  box-shadow: 0 0 12px rgba(239,68,68,0.8);
+}
+
+.hint{
+  margin-top:10px;
+  font-size:12px;
+  opacity:0.7;
+}
   </style>
 </head>
 <body>
@@ -31,7 +79,17 @@
 
 <div class="card">
   <h2>Market Mode</h2>
-  <div class="mode">Cargando...</div>
+
+  <div class="market-row">
+    <div class="mode" id="marketModeText">Cargando...</div>
+
+    <div class="status-wrap" id="marketStatusWrap" style="display:none;">
+      <div class="status-text" id="marketStatusText">Status: --</div>
+      <span class="led" id="marketStatusLed" title="Market Status"></span>
+    </div>
+  </div>
+
+  <div class="hint" id="asOfText"></div>
 </div>
 
 <div class="card">
@@ -50,6 +108,53 @@
     <li>--</li>
   </ul>
 </div>
+<script>
+  async function loadStatus() {
+    const modeEl = document.getElementById("marketModeText");
+    const wrapEl = document.getElementById("marketStatusWrap");
+    const statusEl = document.getElementById("marketStatusText");
+    const ledEl = document.getElementById("marketStatusLed");
+    const asOfEl = document.getElementById("asOfText");
 
+    try {
+      // cache-buster para que no se quede con datos viejos
+      const res = await fetch("./data/status.json?ts=" + Date.now(), { cache: "no-store" });
+      if (!res.ok) throw new Error("No status.json yet");
+
+      const data = await res.json();
+
+      // Texto principal
+      const scoreText = data.market_status_text || "--/9";
+      const label = data.market_status_label || "Neutral";
+
+      modeEl.textContent = "Market Status";
+      statusEl.textContent = `Status: ${scoreText} — ${label}`;
+      wrapEl.style.display = "flex";
+
+      // LED color
+      ledEl.classList.remove("led-green", "led-yellow", "led-red");
+      if (label === "Risk On") ledEl.classList.add("led-green");
+      else if (label === "Risk Off") ledEl.classList.add("led-red");
+      else ledEl.classList.add("led-yellow");
+
+      // As-of (opcional)
+      if (data.asof_local) {
+        asOfEl.textContent = `As of: ${data.asof_local}`;
+      } else if (data.asof_utc) {
+        asOfEl.textContent = `As of (UTC): ${data.asof_utc}`;
+      } else {
+        asOfEl.textContent = "";
+      }
+
+    } catch (e) {
+      // Si aún no existe el JSON, dejamos “Cargando...”
+      modeEl.textContent = "Market Status";
+      wrapEl.style.display = "none";
+      asOfEl.textContent = "";
+    }
+  }
+
+  loadStatus();
+</script>
 </body>
 </html>
