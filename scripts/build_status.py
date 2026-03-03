@@ -6,10 +6,10 @@ from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
 import pandas as pd
-import yfinance as yf
+import requests
 
 # =========================
-# Config (lo puedes cambiar)
+# Config
 # =========================
 TZ = "America/Mexico_City"
 EMA_N = 21
@@ -100,79 +100,104 @@ def label_from_score(score: int) -> str:
     return "Risk On"
 
 
-def write_fallback(note: str):
+def write_json(score: int, label: str, note: str | None = None):
     now_utc = datetime.now(timezone.utc)
     now_local = now_utc.astimezone(ZoneInfo(TZ))
 
     out = {
         "asof_utc": now_utc.isoformat(timespec="seconds"),
         "asof_local": now_local.isoformat(timespec="seconds"),
-        "market_status_score": 0,
-        "market_status_text": "0/9",
-        "market_status_label": "Risk Off",
-        "note": note,
+        "market_status_score": int(score),
+        "market_status_text": f"{int(score)}/9",
+        "market_status_label": label,
     }
+    if note:
+        out["note"] = note
 
     with open(OUT_PATH, "w", encoding="utf-8") as f:
         json.dump(out, f, ensure_ascii=False, indent=2)
 
-    print("Wrote fallback status.json:", note)
+    print(f"Wrote {OUT_PATH}: {out['market_status_text']} {out['market_status_label']}")
+
+
+# =========================
+# Yahoo Chart API
+# =========================
+def fetch_yahoo_close(symbol: str, range_: str = "6mo", interval: str = "1d") -> pd.Series:
+    """
+    Descarga cierres diarios desde Yahoo Chart API.
+    Devuelve pd.Series de Close.
+    """
+    url = f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"
+    params = {"range": range_, "interval": interval}
+    headers = {
+        "User-Agent": "Mozilla/5.0 (compatible; BAMAH-DASHBOARD/1.0)",
+        "Accept": "application/json,text/plain,*/*",
+    }
+
+    r = requests.get(url, params=params, headers=headers, timeout=20)
+    r.raise_for_status()
+    data = r.json()
+
+    chart = data.get("chart", {})
+    error = chart.get("error")
+    if error:
+        raise RuntimeError(f"Yahoo error for {symbol}: {error}")
+
+    result = chart.get("result")
+    if not result or not isinstance(result, list):
+        raise RuntimeError(f"No result for {symbol}")
+
+    res0 = result[0]
+    timestamps = res0.get("timestamp") or []
+    indicators = res0.get("indicators", {})
+    quote = (indicators.get("quote") or [{}])[0]
+    closes = quote.get("close") or []
+
+    if len(timestamps) == 0 or len(closes) == 0:
+        return pd.Series(dtype="float64")
+
+    # Convertir timestamp (UTC) a datetime index
+    idx = pd.to_datetime(timestamps, unit="s", utc=True)
+    s = pd.Series(closes, index=idx, dtype="float64").dropna()
+
+    return s
+
+
+def fetch_with_retry(symbol: str, tries: int = 5) -> pd.Series:
+    waits = [2, 5, 10, 20, 40]
+    last_err = None
+
+    for i in range(tries):
+        try:
+            s = fetch_yahoo_close(symbol)
+            if not s.empty:
+                return s
+        except Exception as e:
+            last_err = e
+        time.sleep(waits[min(i, len(waits) - 1)])
+
+    # Si falla, regresamos vacío (el main decide fallback)
+    print(f"Failed to fetch {symbol}. Last error: {last_err}")
+    return pd.Series(dtype="float64")
 
 
 # =========================
 # Main
 # =========================
 def main():
-    tickers = list(SYMBOLS.values())
+    nyad = fetch_with_retry(SYMBOLS["NYAD"])
+    qqqe = fetch_with_retry(SYMBOLS["QQQE"])
+    vix = fetch_with_retry(SYMBOLS["VIX"])
 
-    df = None
-    last_err = None
-
-    # Reintentos para evitar rate limits temporales
-    waits = [5, 10, 20, 40, 60]
-    for attempt in range(1, 6):
-        try:
-            df = yf.download(
-                tickers=tickers,
-                period="6mo",
-                interval="1d",
-                group_by="ticker",
-                auto_adjust=False,
-                progress=False,
-                threads=False,  # menos agresivo
-            )
-            if df is not None and len(df) > 0:
-                break
-        except Exception as e:
-            last_err = e
-
-        time.sleep(waits[attempt - 1])
-
-    if df is None or len(df) == 0:
-        # Si de plano no bajó nada, escribimos fallback y salimos “bien”
-        write_fallback(f"Download failed (rate-limited or unavailable). Last error: {last_err}")
-        return
-
-    def get_close(ticker: str) -> pd.Series:
-        try:
-            if isinstance(df.columns, pd.MultiIndex):
-                s = df[(ticker, "Close")].dropna()
-            else:
-                s = df["Close"].dropna()
-            return s
-        except Exception:
-            return pd.Series(dtype="float64")
-
-    nyad = get_close(SYMBOLS["NYAD"])
-    qqqe = get_close(SYMBOLS["QQQE"])
-    vix = get_close(SYMBOLS["VIX"])
-
-    # Si algún ticker vino vacío, fallback
     if nyad.empty or qqqe.empty or vix.empty:
-        write_fallback("Data unavailable for one or more symbols (likely rate-limited). Try again soon.")
+        write_json(
+            score=0,
+            label="Risk Off",
+            note="Data unavailable for one or more symbols (Yahoo rate limit or symbol not supported).",
+        )
         return
 
-    # Calculamos puntos
     p_nyad = nyad_points(nyad)
     p_qqqe = qqqe_points(qqqe)
     p_vix = vix_points(vix)
@@ -180,21 +205,7 @@ def main():
     score = int(max(0, min(9, p_nyad + p_qqqe + p_vix)))
     label = label_from_score(score)
 
-    now_utc = datetime.now(timezone.utc)
-    now_local = now_utc.astimezone(ZoneInfo(TZ))
-
-    out = {
-        "asof_utc": now_utc.isoformat(timespec="seconds"),
-        "asof_local": now_local.isoformat(timespec="seconds"),
-        "market_status_score": score,
-        "market_status_text": f"{score}/9",
-        "market_status_label": label,
-    }
-
-    with open(OUT_PATH, "w", encoding="utf-8") as f:
-        json.dump(out, f, ensure_ascii=False, indent=2)
-
-    print(f"Wrote {OUT_PATH}: {out['market_status_text']} {out['market_status_label']}")
+    write_json(score=score, label=label)
 
 
 if __name__ == "__main__":
