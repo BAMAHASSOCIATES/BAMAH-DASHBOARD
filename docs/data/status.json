@@ -1,8 +1,7 @@
 {
-  "asof_utc": "2026-03-03T17:26:22+00:00",
-  "asof_local": "2026-03-03T11:26:22-06:00",
+  "asof_utc": "2026-03-03T17:37:35+00:00",
+  "asof_local": "2026-03-03T11:37:35-06:00",
   "market_status_score": 0,
-  "market_status_text": "0/9",
-  "market_status_label": "Risk Off",
-  "note": "Data unavailable for one or more symbols (Yahoo rate limit or symbol not supported)."
+  "market_status_text": "0/5",
+  "market_status_label": "Risk Off"
 }
