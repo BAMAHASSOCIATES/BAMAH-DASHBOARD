@@ -1,8 +1,8 @@
 {
-  "asof_utc": "2026-03-03T16:12:45+00:00",
-  "asof_local": "2026-03-03T10:12:45-06:00",
+  "asof_utc": "2026-03-03T17:26:22+00:00",
+  "asof_local": "2026-03-03T11:26:22-06:00",
   "market_status_score": 0,
   "market_status_text": "0/9",
   "market_status_label": "Risk Off",
-  "note": "Download failed (rate-limited or unavailable). Last error: None"
+  "note": "Data unavailable for one or more symbols (Yahoo rate limit or symbol not supported)."
 }
