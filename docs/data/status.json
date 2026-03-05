@@ -1,7 +1,7 @@
 {
-  "asof_utc": "2026-03-04T16:03:45+00:00",
-  "asof_local": "2026-03-04T10:03:45-06:00",
-  "market_status_score": 3,
-  "market_status_text": "3/5",
-  "market_status_label": "Neutral"
+  "asof_utc": "2026-03-05T19:01:10+00:00",
+  "asof_local": "2026-03-05T13:01:10-06:00",
+  "market_status_score": 0,
+  "market_status_text": "0/5",
+  "market_status_label": "Risk Off"
 }
