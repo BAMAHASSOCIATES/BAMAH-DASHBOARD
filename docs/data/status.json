@@ -1,7 +1,7 @@
 {
-  "asof_utc": "2026-07-22T15:48:32+00:00",
-  "asof_local": "2026-07-22T09:48:32-06:00",
-  "market_status_score": 1,
-  "market_status_text": "1/5",
+  "asof_utc": "2026-07-23T16:00:40+00:00",
+  "asof_local": "2026-07-23T10:00:40-06:00",
+  "market_status_score": 0,
+  "market_status_text": "0/5",
   "market_status_label": "Risk Off"
 }
